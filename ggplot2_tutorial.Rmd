@@ -1,0 +1,366 @@
+---
+title: "Tutorial - ggplot2"
+author: "Emily Sheen"
+date: "2/22/2019"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+# Suppress warning messages from printing
+```
+
+## Helpful Links
+
+This tutorial was created using other tutorials and helpful websites, which I recommend bookmarking:
+
+* http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.html
+* https://www.r-graph-gallery.com/
+* http://zevross.com/blog/2014/08/04/beautiful-plotting-in-r-a-ggplot2-cheatsheet-3/
+* http://colorbrewer2.org/
+* http://eriqande.github.io/rep-res-web/lectures/making-maps-with-R.html
+* http://www.sthda.com/english/wiki/ggplot2-axis-ticks-a-guide-to-customize-tick-marks-and-labels
+
+## Notes on R Markdown
+
+This document was created with R Markdown, which blends text, LaTex, and R code to create quick and presentable html or pdf documents. See the following link for an introduction to R Markdown: https://kbroman.org/knitr_knutshell/pages/Rmarkdown.html.  Chunks of R code are distinguished by:
+
+```{r chunk_name, echo = TRUE}
+
+# put R code here
+2 + 2
+
+path <- "C:\Users\eshee\Box Sync\Documents\Penn State Statistics\Research\B2D2K\ggplot2_tutorial"
+```
+You can change what gets "knitted" into the final pdf/html document using the following commands at the top of the R chunk: `echo = FALSE`
+
+* `echo = FALSE`: R code will not be printed, output is still printed
+* `results = "hide"`: hide the results/output (but code is still run and displayed if `echo = TRUE`) 
+* `include = FALSE`: R code is evaluated, but neither code nor output is printed in pdf/html
+
+
+## Setup
+
+First, import the data from Github using the following code. We will be using data from Tidy Tuesday, which you can check out here: https://github.com/rfordatascience/tidytuesday, or by searching \#TidyTuesday on Twitter.  These particular datasets look at milk production in the US.  The Data Dictionaries can be found here: https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-01-29/readme.md
+
+```{r load_pkg_data, echo = TRUE, results = "hide"}
+
+#Install packages if you do not already have them (uncomment this code)
+# install.packages(c("readr", "curl"))
+# install.packages(c("ggplot2", "devtools", "dplyr", "stringr"))
+# install.packages(c("maps", "mapdata"))
+library(devtools)
+# devtools::install_github("dkahle/ggmap")
+
+# Load necessary packages
+library(devtools)
+library(readr)
+library(curl)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(maps)
+library(mapdata)
+library(ggmap)
+
+
+# import data from Tidy Tuesday source on Github
+cheese <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-29/clean_cheese.csv")
+fluid_milk_sales <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-29/fluid_milk_sales.csv")
+milk_facts <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-29/milk_products_facts.csv")
+cow_facts <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-29/milkcow_facts.csv")
+state_milk0 <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-29/state_milk_production.csv")
+
+```
+
+## Maps Example
+See http://eriqande.github.io/rep-res-web/lectures/making-maps-with-R.html for the complete R tutorial.
+
+```{r map}
+# Create data frame for map data of USA, using map_data function
+usa <- map_data("usa")
+states <- map_data("state")
+china <- map_data("world") %>% filter(region == "China")
+mapChina <- ggplot(data = china) + 
+  geom_polygon(aes(x=long, y = lat, fill = region, group = group),  
+               color = "navy") + 
+  coord_fixed(1.1) + # aspect ratio = every y unit is 1.1 times longer than an x unit
+  guides(fill = FALSE) # leave off legend
+# mapChina
+
+
+mapStates <- ggplot(data = states) + 
+  geom_polygon(aes(x=long, y = lat, fill = region, group = group),  
+               color = "navy") + 
+  coord_fixed(1.1) + # aspect ratio = every y unit is 1.1 times longer than an x unit
+  guides(fill = FALSE) # leave off legend
+mapStates #map each state with its own color
+
+#Now we will do a map of the states, except with milk production as the color
+# We need to merge the geographic data from states dataframe, with milk data
+#rename the columns of state_milk to be able to join it with states
+names(state_milk0) <- c("big_region", "region", "year", "milk_produced")
+state_milk <- state_milk0 %>% #convert milk production to millions lbs per year
+  mutate_at("milk_produced", function(x){x/1000000}) %>%
+  dplyr::select(-big_region) %>%   # get rid of big_region
+  dplyr::mutate_at("region", tolower) %>%  #change to lower case like states dataframe
+  dplyr::mutate_at("year", as.integer) %>%
+  full_join(states, by = "region") %>%
+  dplyr::select(-subregion)
+
+state_milk_2017 <- state_milk %>% 
+  dplyr::filter(year == 2017) # only look at 2017 milk
+
+milkMap <- ggplot(data = state_milk_2017) + 
+  geom_polygon(aes(x=long, y = lat, fill = milk_produced, group = group),  
+               color = "navy") + 
+  coord_fixed(1) # aspect ratio = every y unit is 1.1 times longer than an x unit
+#  guides(fill = TRUE) # leave off legend
+milkMap
+
+# Create a theme to remove the axes' labels and tick marks
+# if we wanted to remove everything, we could use theme_nothing()
+ditch_the_axes <- theme(
+  axis.text = element_blank(),
+  axis.line = element_blank(),
+  axis.ticks = element_blank(),
+  panel.border = element_blank(),
+  panel.grid = element_blank(),
+  axis.title = element_blank(),
+  title = element_text(size =16),
+  legend.title = element_text(size = 14),
+  legend.text = element_text(size = 12)
+)
+
+# change the color, remove axes labels
+milkMap + 
+  scale_fill_gradient(low = "blue", high = "red",  
+                      breaks = c(10000,20000,30000,40000)) +
+  ditch_the_axes + #removes axes, set text sizes
+  labs(fill = "Milk (Mil. Pounds)") +
+  ggtitle("US Milk Production by State, 2017")
+
+#Make it rainbow
+milkMap + 
+  scale_fill_gradientn(colours = rev(rainbow(10)),  
+                      breaks = c(10000,20000,30000,40000),
+                      trans = "identity") +
+  ditch_the_axes + 
+  labs(fill = "Milk (Mil. Pounds)") +
+  ggtitle("US Milk Production by State, 2017")
+
+path <- "C:/Users/eshee/Box Sync/Documents/Penn State Statistics/Research/B2D2K/ggplot2_tutorial"
+
+ggsave(filename = "Fig1-USMilkProdMap.png", 
+       plot = last_plot(),width = 30, height = 22, units = "cm",
+       dpi = 300, device = "png", path = path)      #save plot
+```
+
+## Maps with Google Maps
+
+We can also create maps from Google's maps services, using the ggmap package. Since 2018, Google now requires users to have a registered API key.  Type ?register_google() into R to see the instructions for registering with google.  Note that Google charges customers for using ggmap after they reach 25000 map loads per day.  This means you need to input your credit card information to obtain a Google API key, but for personal use it should not be possible to surpass the 25000 loads / day threshold unless your private API key is stolen.  Do not share your private API key.
+
+Steps:
+
+1. To obtain an API key, go to  https://cloud.google.com/maps-platform/ and register your payment account.
+2. Store your API key information in a secure place
+3. In cloud.google.com, you can change your API key to only allow your personal IP address to make calls to the Google Server for additional protection
+4. In R, use the command: register_google(key = "AbcD432fghiewomciholdjnslr8y", write = TRUE) to save your API key in R for future sessions.  If you don't say ``write = TRUE", then you will need to register with Google for every R session.
+
+
+After registering with google, let's explore more maps.
+
+```{r google_maps}
+# register_google(key = "private_key_here", write = TRUE)
+#Tell google which lat and long values you want to map using make_bbox()
+tracks_box <- make_bbox(lon = state_milk$long, lat = state_milk$lat, f = 0.5)
+start_map <- get_map(location = tracks_box, maptype = "satellite", source = "google")
+
+# Out map from earlier, except on the google map backdrop
+ggmap(start_map) +
+  geom_polygon(data = state_milk_2017, mapping = aes(x = long, y = lat, group = group,
+                                                   fill = milk_produced)) +
+  scale_fill_gradientn(colours = rev(rainbow(10)),  
+                      breaks = c(10000,20000,30000,40000),
+                      trans = "identity") +
+  ditch_the_axes + 
+  labs(fill = "Milk (Mil. Pounds)") +
+  ggtitle("US Milk Production by State, 2017")
+
+```
+
+## Animated Plots
+
+Now let's try some animated plots.  First there are a few simple examples from the web.  Then we will try to make our map example animated across time, instead of looking at the static milk production in 2017.
+
+```{r animated_map, echo=TRUE}
+# Try an animated map
+# New Source: https://github.com/thomasp85/gganimate
+# install.packages("cowplot")  # a gganimate dependency
+# devtools::install_github("thomasp85/gganimate")
+library(gganimate)
+# install.packages("gifski")
+library(gifski)
+
+# A few examples from online
+anim <- ggplot(mtcars, aes(mpg, disp)) +
+  geom_point() +
+  geom_smooth(colour = 'grey', se = FALSE) +
+  geom_smooth(aes(colour = factor(gear))) +
+  transition_layers(layer_length = 1, transition_length = 2) +
+  enter_fade() + enter_grow()
+animate(anim, fps = 20)
+
+library(gapminder)
+#View(gapminder)
+gdp <- ggplot(gapminder, aes(gdpPercap, lifeExp, size = pop, colour = country)) +
+  geom_point(alpha = 0.7, show.legend = FALSE) +
+  scale_colour_manual(values = country_colors) +
+  scale_size(range = c(2, 12)) +
+  scale_x_log10() +
+  facet_wrap(~continent) +
+  # Here comes the gganimate specific bits
+  labs(title = 'Year: {frame_time}', x = 'GDP per capita', y = 'life expectancy') +
+  transition_time(year) +
+  ease_aes('linear')
+animate(gdp, fps = 20)
+
+# Can we extend to our maps example??
+library(transformr)
+library(tweenr)
+# https://github.com/thomasp85/gganimate/issues/177
+# https://github.com/thomasp85/gganimate/issues/286
+# https://github.com/thomasp85/transformr
+
+milk_range <- sort(unique(state_milk$milk_produced))
+lim <- c(min(milk_range), max(milk_range))
+
+milkMapAnimated <- ggplot(data = state_milk) +
+  geom_polygon(aes(x=long, y = lat, fill = milk_produced, group = group),  
+               color = "black") + 
+  coord_fixed(1) +
+  scale_fill_gradientn(colours = rev(rainbow(10)), limits = lim,
+                      trans = "log10") +
+  ditch_the_axes + #removes axes
+  transition_manual(as.factor(year)) +
+  ease_aes('linear') +
+  labs(title = 'US Milk Production by State: {current_frame}',
+       fill = "Milk (Mil. Pounds)")
+animate(milkMapAnimated, fps = 20, renderer = gifski_renderer(loop = TRUE))
+
+# anim_save("MilkMapAnimation.gif", animation = milkMapAnimated, path = path)
+```
+
+
+
+## Formatting Data for Plotting
+
+Note that ggplot2 requires data to be in a particular format for plotting.  In the first plot below, we are able to plot the response, milk_produced, by time and colored by state, without transforming the data.  This is because the state_milk dataset is in the "long" format.  One column is state, one column is milk produced, and one column is year.  This means we can tell ggplot to plot x = year, y = milk_produced, and col = region.  Each variable has one column associated with it.
+
+```{r line_graphs}
+# Scatter plot of milk production over time by state
+milkTime <- ggplot(state_milk, aes(x=year, y=milk_produced)) + 
+  geom_path(aes(col=region)) + 
+#  geom_smooth(method="loess", se=F) + 
+  xlim(c(1970, 2017)) + 
+  ylim(c(0, 500000)) + 
+  labs(x= "Year", 
+       y="Milk Produced (Millions of Pounds)", 
+       title="Milk Production by State over Time")
+
+rank_states_milk <- state_milk_2017 %>% arrange(desc(milk_produced)) %>% dplyr::select(region) %>% unique()
+```
+
+Consider trying to plot a similar line graph, except for the milk_facts data.  Each observation of this dataset is one year, and the corresponding average dairy consumption in pounds per person across the different types of dairy products.  As a data table, the milk_facts dataset is concise and appealing.  However, for plotting with ggplot2, we would prefer to specify "dairy consumption" as the dependent variable, and give a different line to each category of dairy.  We can very easily convert the data to the desired long format using the melt function from the reshape2 package. 
+
+```{r transform_line_graphs}
+#First, we aggregate a few columns
+milk_facts <- milk_facts %>% 
+  mutate(`Frozen Dairy` = frozen_ice_cream_regular + 
+           frozen_ice_cream_reduced_fat + 
+           frozen_sherbet + frozen_other) %>%
+  mutate(`Cheese` = cheese_american + cheese_cottage + cheese_other) %>%
+  mutate(`Evaporated & Condensed` = evap_cnd_canned_whole_milk +
+           evap_cnd_bulk_whole_milk + 
+           evap_cnd_bulk_and_can_skim_milk) %>%
+  mutate(`Dried Milk` = dry_whole_milk + dry_nonfat_milk + 
+           dry_buttermilk + dry_whey) %>%
+  rename(Milk = fluid_milk, Yogurt = fluid_yogurt, Butter = butter)
+
+# Convert data to long format to be able to plot multiple "y" variables as a single response
+library(reshape2)
+milk_facts_long <- melt(milk_facts, id = "year") %>%
+  rename(cons_lbs_per_person = value, dairy_type = variable) %>%
+  filter(dairy_type %in% c("Milk", "Yogurt", "Butter",
+                           "Frozen Dairy", "Cheese", 
+                           "Evaporated & Condensed", "Dried Milk"))
+View(milk_facts_long)
+
+#Plot the line graph
+dairyTime <- ggplot(milk_facts_long, aes(x = year, 
+                                         y = cons_lbs_per_person,
+                                         col = dairy_type)) +
+  geom_point() +
+  geom_smooth(method="loess", se=TRUE) + 
+  xlim(c(1975, 2017)) + 
+  labs(x= "Year", 
+       y="Avg. Dairy Demand (Lbs/Person)", 
+       title="Dairy Demand Over Time by Type",
+       col = "Dairy Type") +  #Change text size
+  theme(title = element_text(size =24),
+        strip.text.x = element_text(size = 10),
+        axis.title = element_text(size = 16),
+        axis.text.y = element_text(size = 12),
+        axis.text.x = element_text(size =12),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 12),
+        plot.margin = unit(c(5, 5, 5, 5), "mm")
+        )
+dairyTime
+
+#Save the plot to your folder
+path <- "C:/Users/eshee/Box Sync/Documents/Penn State Statistics/Research/B2D2K/ggplot2_tutorial"
+# ggsave(filename = "Fig2-dairyDemandByTimeType.png", 
+#        plot = last_plot(),width = 26, height = 22, units = "cm",
+#        dpi = 300, device = "png", path = path)      #save plot
+
+
+```
+
+
+## Base-R Cake Example
+https://www.r-bloggers.com/fun-with-r-graphics-a-raptor-and-a-cake/
+
+
+Happy Birthday Ana!
+```{r cake}
+library(plotrix)
+candle = function(pos) {
+  x=pos[1]
+  y=pos[2]
+  rect(x,y,x+.2,y+2,col="red")
+  # polygon(c(x-.2,x+.4,x+.1,x-.2), c(y+2,y+2,y+2.4,y+2),col="orange")
+  # polygon(c(x+.05,x-.1,x+.1,x+.3,x+.15,x+0.05), x = 
+  #           c(y+2,y+2.3,y+2.6,y+2.3,y+2,y+2),col="orange")
+  polygon(x = c(x, x+.1,x+.2,x+.1), y = c(y+2.4,y+2.8,y+2.4,y+2), col="orange")
+}
+
+cake_colour="#FF3399"
+plot(c(0,10), c(0,10),type="n", bty="n",xaxt="n",yaxt="n", main="Happy Birthday Ana!", xlab="",ylab="")
+draw.ellipse(5,2,col=cake_colour,a=4.4,b=1.7,border=1)
+draw.ellipse(5,2,col=cake_colour,a=4,b=1.4,border=1)
+rect(1,2,9,5,col=cake_colour,border=cake_colour)
+lines(c(1,1),c(2,5))
+lines(c(9,9),c(2,5))
+draw.ellipse(5,5,col=cake_colour,a=4,b=1.4)
+
+candle(c(2.5,4.5))
+candle(c(3,5))
+candle(c(4,4.5))
+candle(c(5,5))
+candle(c(6,4.5))
+candle(c(7,5.2))
+```
